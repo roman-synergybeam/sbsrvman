@@ -51,7 +51,9 @@ const vnc = require('./lib/vnc');
 
 let allUsersRun = null;   // background "Update All Users" batch: { running, total, done, ok, failed[], current }
 
+const selfReload = require('./lib/selfreload');
 const server = http.createServer((req, res) => {
+  selfReload.track(res);                   // a self-restart waits for requests in flight
   const url = (req.url || '/').split('?')[0];
   if (!auth.authGate(req, res, url)) return;
   if (url === '/brand-logo') return brand.serve(req, res);
@@ -537,5 +539,6 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
 }
 
 server.listen(PORT, HOST, () => {
+  selfReload.start();                      // code changes in lib/, ui/, server.js apply themselves
   console.log(`sb-srv-mon (RHC SRV Manager) listening on http://${HOST}:${PORT}`);
 });

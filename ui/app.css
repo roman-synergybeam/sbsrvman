@@ -564,24 +564,24 @@
      Toasts: white card with a coloured leading edge, bottom-left. */
   .tab .tr-pending { margin-left:auto; min-width:20px; height:20px; padding:0 6px; border-radius:10px; background:var(--md-warning); color:#fff; font-size:12px; font-weight:600; line-height:20px; text-align:center; }
   #toast-host { position:fixed; bottom:24px; right:24px; align-items:flex-end; display:flex; flex-direction:column; gap:8px;
-                z-index:9999; max-width:min(480px, calc(100vw - 48px)); pointer-events:none; }
-  .toast { display:flex; align-items:flex-start; gap:12px; min-height:48px;
+                z-index:9999; max-width:min(720px, calc(100vw - 48px)); pointer-events:none; }
+  .toast { display:flex; align-items:flex-start; gap:14px; min-height:56px; min-width:min(420px, calc(100vw - 48px));
            background:var(--md-surface-24dp); color:var(--md-on-surface); border:1px solid var(--clp-border);
            border-left:4px solid var(--md-on-surface-dis); border-radius:var(--md-shape-s);
-           padding:12px 16px; font-size:14px; line-height:20px; letter-spacing:.25px;
+           padding:16px 20px; font-size:16.5px; line-height:24px; letter-spacing:.2px;
            box-shadow:var(--md-elev-6); pointer-events:auto;
            animation:toast-in var(--md-dur-medium) var(--md-ease-decelerate); }
   .toast.fade    { animation:toast-out var(--md-dur-short) var(--md-ease-accelerate) forwards; }
   .toast.success { border-left-color:var(--md-ok); }
   .toast.error   { border-left-color:var(--md-error); }
   .toast.warn    { border-left-color:var(--md-warning); }
-  .toast .ico  { flex:0 0 auto; font-size:16px; line-height:20px; }
+  .toast .ico  { flex:0 0 auto; font-size:20px; line-height:24px; }
   .toast .body { flex:1; min-width:0; }
   .toast .body pre { margin:8px 0 0; padding:8px 12px; background:var(--md-background);
-                     border-radius:var(--md-shape-s); max-height:120px; overflow:auto;
-                     color:var(--md-on-surface-med); font-family:var(--md-font-mono); font-size:12px;
+                     border-radius:var(--md-shape-s); max-height:320px; overflow:auto;
+                     color:var(--md-on-surface-med); font-family:var(--md-font-mono); font-size:14px; line-height:20px;
                      white-space:pre-wrap; word-break:break-word; }
-  .toast .x { flex:0 0 auto; cursor:pointer; color:var(--md-on-surface-med); font-size:18px; line-height:20px;
+  .toast .x { flex:0 0 auto; cursor:pointer; color:var(--md-on-surface-med); font-size:24px; line-height:24px;
               user-select:none; padding:0 2px; }
   .toast .x:hover { color:var(--md-on-surface); }
   @keyframes toast-in  { from { opacity:0; transform:translateY(16px) scale(.96); } to { opacity:1; transform:none; } }

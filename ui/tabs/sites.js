@@ -1455,20 +1455,24 @@ async function siteOvSave(group){
 }
 
 /* ---- GitHub: own private repo, auto commit & push to main, Update = pull + restart ---- */
+function siteGhAccountsHtml(g){
+  return '<div class="dim" style="font-size:13.5px;margin:10px 0 0">GitHub accounts on this server: ' + ((g.accounts || []).length ? g.accounts.map(a => '<b>' + esc(a) + '</b>').join(', ') : '<b>none</b>')
+    + ' · the account that can see a repo is used for it. <a href="#" onclick="event.preventDefault();siteGhLogin()">Sign in with GitHub</a> to add one.</div>';
+}
 function siteTabGithub(s){
   return siteSub('github', siteUrl('/github'), (g) => {
     if (!g.connected) return siteCard('GitHub', '<p class="dim" style="margin:0 0 8px;font-size:14.5px">Not connected. Connecting creates a private repo <b>' + esc(g.defaultOwner) + '/' + esc(s.domain) + '</b> (or uses the repo this code was cloned from), gives the site a deploy key that can only reach that repo, and pushes the code to <b>main</b>. Data folders, databases, keys and .env files are never committed.</p>'
-      + '<div class="site-actions" style="justify-content:space-between"><button class="btn" onclick="siteGhRepo()">Use another repo…</button><button class="btn pri" onclick="this.disabled=true;siteGhConnect({})">Connect to ' + esc(g.defaultOwner) + '/' + esc(s.domain) + '</button></div>');
+      + '<div class="site-actions" style="justify-content:space-between"><button class="btn" onclick="siteGhRepo()">Connect to an existing repo…</button><button class="btn pri" onclick="this.disabled=true;siteGhConnect({})">Connect to ' + esc(g.defaultOwner) + '/' + esc(s.domain) + '</button></div>' + siteGhAccountsHtml(g));
     const l = g.last;
     const when = (t) => t ? esc(new Date(t).toLocaleString()) : '–';
-    let h = '<p style="margin:0 0 6px"><a href="' + esc(g.url) + '" target="_blank" rel="noopener"><b>' + esc(g.repo) + '</b> ↗</a>' + (g.manual ? ' <span class="dim">(set by hand)</span>' : ' <span class="dim">(default owner)</span>') + ' · branch <span class="mono">' + esc(g.branch) + '</span>'
+    let h = '<p style="margin:0 0 6px"><a href="' + esc(g.url) + '" target="_blank" rel="noopener"><b>' + esc(g.repo) + '</b> ↗</a>' + (g.manual ? ' <span class="dim">(set by hand)</span>' : ' <span class="dim">(default owner)</span>') + (g.auth === 'token' ? ' <span class="dim" title="the organisation disables deploy keys on this repo">· over HTTPS with the signed-in GitHub account (deploy keys are disabled for this repo)</span>' : '') + ' · branch <span class="mono">' + esc(g.branch) + '</span>'
       + (g.upstream ? ' · upstream <span class="mono dim">' + esc(g.upstream) + '</span>' : '') + '</p>'
       + '<div class="upd-toggle"><label class="switch"><input type="checkbox"' + (g.autoSync ? ' checked' : '') + ' onchange="siteGhAuto(this.checked)"><span class="slider"></span></label><label>Auto-sync: commit &amp; push changes made on the server every 15 min</label></div>'
       + '<div class="' + (l && !l.ok ? 'site-why' : 'dim') + '" style="font-size:14px;margin:6px 0">Last sync ' + (l ? when(l.at) + ': ' + esc(l.summary) : 'not yet') + (g.dirty ? ' · <b>' + g.dirty + ' uncommitted change(s)</b> on the server' : '') + '</div>';
     if (g.commits && g.commits.length) h += '<table class="upd-table"><tr><th>Commit</th><th>Message</th><th>By</th><th>When</th></tr>' + g.commits.map(c => '<tr><td class="mono"><a href="' + esc(g.url) + '/commit/' + esc(c.hash) + '" target="_blank" rel="noopener">' + esc(c.hash) + '</a></td><td>' + esc(c.subject) + '</td><td class="dim">' + esc(c.author) + '</td><td class="dim" style="white-space:nowrap">' + when(c.date) + '</td></tr>').join('') + '</table>';
-    h += '<div class="site-actions" style="justify-content:space-between"><span><button class="btn" onclick="siteGhAct(\'sync\', this)">Commit &amp; push now</button> <button class="btn" onclick="siteGhRepo()">Move to another repo…</button> <button class="btn danger" onclick="armConfirm(this, \'Stop syncing? Click again\', () => siteGhDisconnect(this))">Disconnect</button></span>'
+    h += '<div class="site-actions" style="justify-content:space-between"><span><button class="btn" onclick="siteGhAct(\'sync\', this)">Commit &amp; push now</button> <button class="btn" onclick="siteGhRepo()">Connect to an existing repo…</button> <button class="btn danger" onclick="armConfirm(this, \'Stop syncing? Click again\', () => siteGhDisconnect(this))">Disconnect</button></span>'
       + '<button class="btn pri" onclick="armConfirm(this, \'Pull main and restart?\', () => siteGhAct(\'update\', this))">Update from GitHub</button></div>'
-      + '<p class="dim" style="font-size:13.5px;margin:8px 0 0">Update commits local changes first, pulls <b>main</b> (rebase), installs requirements.txt / package.json dependencies if they changed, and restarts the site\'s apps. Commits made on GitHub are never pulled automatically.</p>';
+      + '<p class="dim" style="font-size:13.5px;margin:8px 0 0">Update commits local changes first, pulls <b>main</b> (rebase), installs requirements.txt / package.json dependencies if they changed, and restarts the site\'s apps. Commits made on GitHub are never pulled automatically.</p>' + siteGhAccountsHtml(g);
     return siteCard('GitHub', h);
   });
 }
@@ -1483,7 +1487,7 @@ async function siteGhAct(what, btn){
   siteSubReload('github');
 }
 async function siteGhRepo(){
-  const repo = await askModal({ title: 'GitHub repository for this site', label: 'owner/name or a github.com URL — created (private) if it does not exist; the site moves there and its deploy key leaves the old repo', placeholder: 'roman-synergybeam/' + siteView.domain, ok: 'Use this repo' });
+  const repo = await askModal({ title: 'Connect to an existing GitHub repo', label: 'Repository — owner/name or its github.com URL', hint: 'If the repo has code, you choose next: the site runs the repo\'s code, or the server\'s code is added on top. A repo that does not exist yet is created (private).', placeholder: 'owner/repo or https://github.com/owner/repo', ok: 'Connect' });
   if (!repo || !repo.trim()) return;
   await siteGhConnect({ repo: repo.trim() });
 }
@@ -1497,6 +1501,8 @@ async function siteGhConnect(body){
     if (e.code === 'repo-has-code' && !body.mode) {
       const mode = await siteGhChoose(body.repo || 'that repo', e.detail);
       if (mode) return siteGhConnect(Object.assign({}, body, { mode }));
+    } else if (e.code === 'gh-no-access') {
+      siteGhLogin({ why: e.message, retry: body });
     } else siteErr(e, 'GitHub');
   }
   siteSubReload('github');
@@ -1517,6 +1523,44 @@ function siteGhChoose(repo, detail){
     bg.addEventListener('mousedown', (e) => { if (e.target === bg) finish(null); });
     document.addEventListener('keydown', onKey);
   });
+}
+// Sign in with GitHub: device flow — the server shows a one-time code, it is approved on github.com,
+// the account is added to the server. opts.retry: the connect to run again once signed in.
+async function siteGhLogin(opts){
+  opts = opts || {};
+  let alive = true;
+  const bg = sshModal('<h3>Sign in with GitHub</h3>'
+    + (opts.why ? '<p style="font-size:14px;margin:0 0 10px;color:var(--md-warning)">' + esc(opts.why) + '</p>' : '')
+    + '<div id="ghlBody" style="font-size:14.5px">Asking GitHub for a sign-in code…</div>'
+    + '<div class="foot"><button class="btn" id="ghlClose">Close</button></div>');
+  const close = () => { alive = false; sshModalClose(); };
+  bg.querySelector('#ghlClose').onclick = close;
+  bg.addEventListener('mousedown', (e) => { if (e.target === bg) alive = false; });
+  const body = () => document.getElementById('ghlBody');
+  let v;
+  try { v = await siteApi('POST', 'api/github/login', {}); } catch(e){ if (body()) body().innerHTML = '<span style="color:var(--md-error-bright)">' + esc(e.message) + '</span>'; return; }
+  if (!v.code) { if (body()) body().innerHTML = '<span style="color:var(--md-error-bright)">GitHub did not give a code' + (v.error ? ': ' + esc(v.error) : '') + '</span>'; return; }
+  const url = v.url || 'https://github.com/login/device';
+  if (body()) body().innerHTML = '<ol style="margin:0 0 10px;padding-left:20px;line-height:1.7">'
+    + '<li>Open <a href="' + esc(url) + '" target="_blank" rel="noopener"><b>' + esc(url.replace('https://', '')) + '</b> ↗</a> and sign in with the GitHub account that has access to the repo.</li>'
+    + '<li>Enter this code: <span class="mono" style="font-size:22px;font-weight:700;letter-spacing:2px;padding:2px 10px;border-radius:6px;background:var(--md-surface-container-high, rgba(127,127,127,.15))">' + esc(v.code) + '</span> <button class="btn small" onclick="navigator.clipboard && navigator.clipboard.writeText(\'' + esc(v.code) + '\').then(() => toast(\'Code copied\', \'success\'))">Copy</button></li>'
+    + '<li>Approve the access for <b>GitHub CLI</b>. This window notices on its own.</li></ol>'
+    + '<div id="ghlState" class="dim">⏳ waiting for approval…</div>';
+  while (alive) {
+    await new Promise(r => setTimeout(r, 2000));
+    try { v = await siteApi('GET', 'api/github/login'); } catch(_){ continue; }
+    if (!v.done) continue;
+    const st = document.getElementById('ghlState');
+    if (!v.ok) { if (st) st.innerHTML = '<span style="color:var(--md-error-bright)">❌ ' + esc(v.error || 'sign-in failed') + '</span>'; return; }
+    if (st) st.innerHTML = '<span class="up">✅ Signed in as <b>' + esc(v.account || '?') + '</b></span> · accounts on this server: ' + esc((v.accounts || []).join(', '));
+    toast('Signed in to GitHub as ' + (v.account || '?'), 'success');
+    if (siteView.domain) siteSubReload('github');
+    if (opts.retry && alive) {
+      const f = bg.querySelector('.foot');
+      if (f) { f.insertAdjacentHTML('beforeend', '<button class="btn pri" id="ghlRetry">Connect ' + esc(opts.retry.repo || '') + ' now</button>'); bg.querySelector('#ghlRetry').onclick = () => { close(); siteGhConnect(opts.retry); }; }
+    }
+    return;
+  }
 }
 async function siteGhDisconnect(btn){
   if (btn) btn.disabled = true;
