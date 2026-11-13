@@ -1456,7 +1456,8 @@ async function siteOvSave(group){
 
 /* ---- GitHub: own private repo, auto commit & push to main, Update = pull + restart ---- */
 function siteGhAccountsHtml(g){
-  return '<div class="dim" style="font-size:13.5px;margin:10px 0 0">GitHub accounts on this server: ' + ((g.accounts || []).length ? g.accounts.map(a => '<b>' + esc(a) + '</b>').join(', ') : '<b>none</b>')
+  setTimeout(siteGhJobLine, 0);
+  return '<div id="ghJobLine" style="font-size:14px;margin:10px 0 0"></div><div class="dim" style="font-size:13.5px;margin:10px 0 0">GitHub accounts on this server: ' + ((g.accounts || []).length ? g.accounts.map(a => '<b>' + esc(a) + '</b>').join(', ') : '<b>none</b>')
     + ' · the account that can see a repo is used for it. <a href="#" onclick="event.preventDefault();siteGhLogin()">Sign in with GitHub</a> to add one.</div>';
 }
 function siteTabGithub(s){
@@ -1467,16 +1468,20 @@ function siteTabGithub(s){
     const when = (t) => t ? esc(new Date(t).toLocaleString()) : '–';
     let h = '<p style="margin:0 0 6px"><a href="' + esc(g.url) + '" target="_blank" rel="noopener"><b>' + esc(g.repo) + '</b> ↗</a>' + (g.manual ? ' <span class="dim">(set by hand)</span>' : ' <span class="dim">(default owner)</span>') + (g.auth === 'token' ? ' <span class="dim" title="the organisation disables deploy keys on this repo">· over HTTPS with the signed-in GitHub account (deploy keys are disabled for this repo)</span>' : '') + ' · branch <span class="mono">' + esc(g.branch) + '</span>'
       + (g.upstream ? ' · upstream <span class="mono dim">' + esc(g.upstream) + '</span>' : '') + '</p>'
-      + '<div class="upd-toggle"><label class="switch"><input type="checkbox"' + (g.autoSync ? ' checked' : '') + ' onchange="siteGhAuto(this.checked)"><span class="slider"></span></label><label>Auto-sync: commit &amp; push changes made on the server every 15 min</label></div>'
+      + '<div class="upd-toggle"><label class="switch"><input type="checkbox"' + (g.autoSync ? ' checked' : '') + ' onchange="siteGhAuto(this.checked)"><span class="slider"></span></label><label>Auto-sync every 15 min: pull new commits from GitHub (install, build, restart) and commit &amp; push changes made on the server</label></div>'
       + '<div class="' + (l && !l.ok ? 'site-why' : 'dim') + '" style="font-size:14px;margin:6px 0">Last sync ' + (l ? when(l.at) + ': ' + esc(l.summary) : 'not yet') + (g.dirty ? ' · <b>' + g.dirty + ' uncommitted change(s)</b> on the server' : '') + '</div>';
     if (g.commits && g.commits.length) h += '<table class="upd-table"><tr><th>Commit</th><th>Message</th><th>By</th><th>When</th></tr>' + g.commits.map(c => '<tr><td class="mono"><a href="' + esc(g.url) + '/commit/' + esc(c.hash) + '" target="_blank" rel="noopener">' + esc(c.hash) + '</a></td><td>' + esc(c.subject) + '</td><td class="dim">' + esc(c.author) + '</td><td class="dim" style="white-space:nowrap">' + when(c.date) + '</td></tr>').join('') + '</table>';
-    h += '<div class="site-actions" style="justify-content:space-between"><span><button class="btn" onclick="siteGhAct(\'sync\', this)">Commit &amp; push now</button> <button class="btn" onclick="siteGhRepo()">Connect to an existing repo…</button> <button class="btn danger" onclick="armConfirm(this, \'Stop syncing? Click again\', () => siteGhDisconnect(this))">Disconnect</button></span>'
-      + '<button class="btn pri" onclick="armConfirm(this, \'Pull main and restart?\', () => siteGhAct(\'update\', this))">Update from GitHub</button></div>'
-      + '<p class="dim" style="font-size:13.5px;margin:8px 0 0">Update commits local changes first, pulls <b>main</b> (rebase), installs requirements.txt / package.json dependencies if they changed, and restarts the site\'s apps. Commits made on GitHub are never pulled automatically.</p>' + siteGhAccountsHtml(g);
+    h += '<div class="site-actions" style="justify-content:space-between"><span><button class="btn pri" onclick="siteGhAct(\'sync\', this)">⇅ Sync now (pull &amp; push)</button> <button class="btn" onclick="siteGhRepo()">Connect to an existing repo…</button> <button class="btn danger" onclick="armConfirm(this, \'Stop syncing? Click again\', () => siteGhDisconnect(this))">Disconnect</button></span>'
+      + '<span><button class="btn" onclick="armConfirm(this, \'Install, build and restart?\', () => siteGhAct(\'rebuild\', this))" title="install dependencies, npm run build, start the app from ecosystem.config.js — from the code already on the server">🔧 Rebuild &amp; restart</button> <button class="btn" onclick="armConfirm(this, \'Pull, build and restart?\', () => siteGhAct(\'update\', this))">⬇ Pull from GitHub</button></span></div>'
+      + '<p class="dim" style="font-size:13.5px;margin:8px 0 0">Sync and Pull commit local changes first, pull the branch (rebase), install dependencies when package.json / requirements.txt changed, run <span class="mono">npm run build</span> when the app has a build script, and restart the site\'s apps — a failed install or build leaves the running app alone.</p>' + siteGhAccountsHtml(g);
     return siteCard('GitHub', h);
   });
 }
 async function siteGhAct(what, btn){
+  if (what === 'update') return siteGhRun('update', 'Pulling from GitHub', {});
+  if (what === 'sync') return siteGhRun('sync', 'Syncing with GitHub (pull & push)', {});
+  if (what === 'rebuild') return siteGhRun('rebuild', 'Rebuild & restart', {});
+  if (what === 'connect') return siteGhConnect({});
   if (btn) btn.disabled = true;
   toast(what === 'connect' ? 'Connecting to GitHub…' : what === 'update' ? 'Updating from GitHub…' : 'Syncing…');
   try {
@@ -1493,20 +1498,76 @@ async function siteGhRepo(){
 }
 // Connect (or move) — when the repo already holds other code, ask which code wins and try again.
 async function siteGhConnect(body){
-  toast(body.repo ? 'Connecting to ' + body.repo + '…' : 'Connecting to GitHub…');
-  try {
-    const r = await siteApi('POST', siteUrl('/github/connect'), body);
-    toast('Now syncing to ' + r.repo, 'success', { detail: (r.steps || []).join('\n'), duration: 12000 });
-  } catch(e){
-    if (e.code === 'repo-has-code' && !body.mode) {
-      const mode = await siteGhChoose(body.repo || 'that repo', e.detail);
-      if (mode) return siteGhConnect(Object.assign({}, body, { mode }));
-    } else if (e.code === 'gh-no-access') {
-      siteGhLogin({ why: e.message, retry: body });
-    } else siteErr(e, 'GitHub');
+  const j = await siteGhRun('connect', 'Connecting to ' + (body.repo || 'GitHub'), body);
+  if (!j || j.ok) return;
+  if (j.code === 'repo-has-code' && !body.mode) {
+    const mode = await siteGhChoose(body.repo || j.repo || 'that repo', j.detail);
+    if (mode) return siteGhConnect(Object.assign({}, body, { mode }));
+  } else if (j.code === 'gh-no-access') {
+    siteGhLogin({ why: j.error, retry: body });
   }
-  siteSubReload('github');
 }
+// Start a GitHub job (connect / update / disconnect) and follow it in a progress window: every step
+// as the server records it, a running clock, and the outcome — the error and GitHub's answer when it
+// fails. Closing the window does not stop the job. Resolves with the finished job.
+async function siteGhRun(kind, title, body){
+  let j;
+  try { j = await siteApi('POST', siteUrl('/github/' + kind), body || {}); }
+  catch(e){
+    if (e.status === 409) { toast(e.message + ' — showing its progress', 'warn'); try { j = await siteApi('GET', siteUrl('/github/job')); } catch(_){} }
+    if (!j) { siteErr(e, 'GitHub'); return null; }
+  }
+  return siteGhFollow(j, title);
+}
+async function siteGhFollow(j, title){
+  let open = true;
+  const domain = siteView.domain;
+  const bg = sshModal('<h3>' + esc(title || ('GitHub ' + j.kind)) + '</h3>'
+    + '<div id="ghjHead" class="dim" style="font-size:14px;margin-bottom:8px"></div>'
+    + '<div id="ghjSteps" class="mono" style="font-size:13.5px;line-height:1.6;max-height:50vh;overflow:auto;padding:10px 12px;border-radius:6px;background:var(--md-surface-container-high, rgba(127,127,127,.12));white-space:pre-wrap;word-break:break-word"></div>'
+    + '<div id="ghjEnd" style="margin-top:10px;font-size:14.5px"></div>'
+    + '<div class="foot"><span class="dim" style="margin-right:auto;font-size:13px">Closing this window does not stop it.</span><button class="btn" id="ghjClose">Close</button></div>');
+  bg.querySelector('#ghjClose').onclick = () => { open = false; sshModalClose(); };
+  bg.addEventListener('mousedown', (e) => { if (e.target === bg) open = false; });
+  const t0 = Date.parse(j.startedAt);
+  const clock = (iso) => { const s = Math.max(0, Math.round((Date.parse(iso) - t0) / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+  const draw = () => {
+    if (!open) return;
+    const st = document.getElementById('ghjSteps'), hd = document.getElementById('ghjHead'), end = document.getElementById('ghjEnd');
+    if (!st) return;
+    const atBottom = st.scrollHeight - st.scrollTop - st.clientHeight < 24;
+    st.innerHTML = (j.steps || []).map((x, i, a) => '<div><span class="dim">' + clock(x.at) + '</span>  ' + (j.done || i < a.length - 1 ? '✓' : '⏳') + ' ' + esc(x.text) + '</div>').join('')
+      || '<span class="dim">starting…</span>';
+    if (atBottom) st.scrollTop = st.scrollHeight;
+    hd.innerHTML = j.done ? (j.ok ? 'Finished' : 'Stopped') + ' after ' + clock(j.finishedAt) : '⏳ working… <span class="ag-since" data-since="' + esc(j.startedAt) + '">' + agElapsed(j.startedAt) + '</span>';
+    if (!j.done) end.innerHTML = '';
+    else if (j.ok) end.innerHTML = '<span class="up">✅ ' + esc(j.kind === 'connect' ? 'Connected to ' + ((j.result && j.result.repo) || j.repo || 'GitHub') : j.kind === 'disconnect' ? 'Disconnected' : j.kind === 'rebuild' ? 'Rebuilt and restarted' : j.kind === 'sync' ? 'Synced' + (j.result && j.result.pulled ? ' — pulled ' + j.result.pulled + ' commit(s) from GitHub' : '') : (j.result && j.result.changed === false) ? 'Already up to date' : 'Updated') + '</span>'
+      + (j.result && j.result.last && j.result.last.ok === false ? '<div style="color:var(--md-warning);margin-top:4px">⚠ ' + esc(j.result.last.summary) + '</div>' : '');
+    else end.innerHTML = '<div style="color:var(--md-error-bright)">❌ ' + esc(j.error || 'failed') + '</div>'
+      + (j.code === 'repo-has-code' ? '<div class="dim">The repo already has code — choose what to do next.</div>' : j.code === 'gh-no-access' ? '<div class="dim">Sign in with a GitHub account that can see the repo — opening that next.</div>' : '')
+      + (j.detail ? '<pre class="mono" style="margin:6px 0 0;max-height:220px;overflow:auto;font-size:13px;white-space:pre-wrap">' + esc(j.detail) + '</pre>' : '');
+  };
+  draw();
+  while (!j.done) {
+    await new Promise(r => setTimeout(r, 1000));
+    try { const n = await siteApi('GET', 'api/sites/' + encodeURIComponent(domain) + '/github/job'); if (n && n.id === j.id) j = n; } catch(_){}
+    draw();
+  }
+  if (siteView.domain === domain) siteSubReload('github');
+  // a follow-up dialog (choose / sign in) takes over from this window
+  if (!j.ok && (j.code === 'repo-has-code' || j.code === 'gh-no-access') && open) { await new Promise(r => setTimeout(r, 1200)); if (open) sshModalClose(); }
+  else if (!open) toast(j.ok ? 'GitHub ' + j.kind + ' finished' : 'GitHub ' + j.kind + ' failed: ' + j.error, j.ok ? 'success' : 'error', j.detail ? { detail: j.detail, duration: 15000 } : {});
+  return j;
+}
+// A job that is still running when the tab is opened (page reloaded, came back later): offer its window.
+async function siteGhJobLine(){
+  const el = document.getElementById('ghJobLine'); if (!el) return;
+  let j = null; try { j = await siteApi('GET', siteUrl('/github/job')); } catch(_){}
+  if (!j) return;
+  if (!j.done) el.innerHTML = '⏳ A GitHub ' + esc(j.kind) + ' is running — <a href="#" onclick="event.preventDefault();siteGhReopen()">show progress</a>';
+  else if (!j.ok && Date.now() - Date.parse(j.finishedAt) < 30 * 60_000) el.innerHTML = '<span style="color:var(--md-error-bright)">❌ Last GitHub ' + esc(j.kind) + ' failed: ' + esc(j.error) + '</span> — <a href="#" onclick="event.preventDefault();siteGhReopen()">details</a>';
+}
+async function siteGhReopen(){ try { const j = await siteApi('GET', siteUrl('/github/job')); if (j) siteGhFollow(j); } catch(e){ siteErr(e, 'GitHub'); } }
 function siteGhChoose(repo, detail){
   return new Promise((resolve) => {
     let done = false;
@@ -1564,9 +1625,7 @@ async function siteGhLogin(opts){
 }
 async function siteGhDisconnect(btn){
   if (btn) btn.disabled = true;
-  try { const r = await siteApi('POST', siteUrl('/github/disconnect'), {}); toast('Disconnected from GitHub', 'success', { detail: (r.steps || []).join('\n'), duration: 10000 }); }
-  catch(e){ siteErr(e, 'GitHub'); }
-  siteSubReload('github');
+  await siteGhRun('disconnect', 'Disconnecting from GitHub', {});
 }
 async function siteGhAuto(on){
   try { await siteApi('PUT', siteUrl('/github'), { autoSync: on }); toast('Auto-sync ' + (on ? 'on' : 'off'), 'success'); } catch(e){ siteErr(e, 'GitHub'); }
